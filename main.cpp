@@ -6,26 +6,6 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/videoio.hpp>
 #include <librealsense2/rs.hpp>
-
-using namespace cv;
-using namespace std;
-
-// int main(){
-//     VideoCapture capture;
-//     capture.release();
-//     capture = VideoCapture("/dev/video2");
-
-//     rs2::pipeline p;
-//     p.start();
-//     rs2::frameset frames = p.wait_for_frames();
-//     rs2::depth_frame depth
-
-//     if(capture.isOpened()){
-//         std::cout<<"fuck"<<std::endl;
-//     }
-//     return 0;
-// }
-
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
 #include <iostream>
 #include <opencv2/opencv.hpp>
@@ -47,8 +27,86 @@ using namespace std;
 #include <sys/types.h>
 #include <unistd.h>
 #include <string.h>
+#include <dlib/image_io.h>
+#include <dlib/opencv.h>
+#include <dlib/dnn.h>
+#include <dlib/data_io.h>
+#include <dlib/clustering.h>
+#include <dlib/string.h>
 
-using namespace dlib;
+using namespace cv;
+using namespace std;
+
+const std::string imagePath = "../images/man.jpeg";
+const std::string dlibModel = "../dataset/data";
+const std::string cvModel = "../dataset/haarcascade_frontalface_alt2.xml";
+const std::string dnnModel = "../dataset/resnet_data";
+
+void getFiles(std::string path, std::map<std::string, std::string> &files){
+    DIR *dir;
+    struct dirent *ptr;
+    char base[1000];
+ 
+    if(path[path.length()-1] != '/')
+        path = path + "/";
+ 
+    if((dir = opendir(path.c_str())) == NULL)
+    {
+        cout<<"open the dir: "<< path <<"error!" <<endl;
+        return;
+    }
+ 
+    while((ptr=readdir(dir)) !=NULL )
+    {
+        ///current dir OR parrent dir 
+        if(strcmp(ptr->d_name,".")==0 || strcmp(ptr->d_name,"..")==0) 
+            continue; 
+        else if(ptr->d_type == 8) //file
+        {
+            string fn(ptr->d_name);
+            string name;
+            name = fn.substr(0, fn.find_last_of("."));
+ 
+            string p = path + string(ptr->d_name);
+            files.insert(pair<string, string>(p, name));
+        }
+        else if(ptr->d_type == 10)    ///link file
+        {}
+        else if(ptr->d_type == 4)    ///dir
+        {}
+    }
+ 
+    closedir(dir);
+    return ;
+}
+ 
+template <template <int,template<typename>class,int,typename> class block, int N, template<typename>class BN, typename SUBNET>
+using residual = dlib::add_prev1<block<N,BN,1,dlib::tag1<SUBNET>>>;
+ 
+template <template <int,template<typename>class,int,typename> class block, int N, template<typename>class BN, typename SUBNET>
+using residual_down = dlib::add_prev2<dlib::avg_pool<2,2,2,2,dlib::skip1<dlib::tag2<block<N,BN,2,dlib::tag1<SUBNET>>>>>>;
+ 
+template <int N, template <typename> class BN, int stride, typename SUBNET> 
+using block  = BN<dlib::con<N,3,3,1,1,dlib::relu<BN<dlib::con<N,3,3,stride,stride,SUBNET>>>>>;
+ 
+template <int N, typename SUBNET> using ares      = dlib::relu<residual<block,N,dlib::affine,SUBNET>>;
+template <int N, typename SUBNET> using ares_down = dlib::relu<residual_down<block,N,dlib::affine,SUBNET>>;
+ 
+template <typename SUBNET> using alevel0 = ares_down<256,SUBNET>;
+template <typename SUBNET> using alevel1 = ares<256,ares<256,ares_down<256,SUBNET>>>;
+template <typename SUBNET> using alevel2 = ares<128,ares<128,ares_down<128,SUBNET>>>;
+template <typename SUBNET> using alevel3 = ares<64,ares<64,ares<64,ares_down<64,SUBNET>>>>;
+template <typename SUBNET> using alevel4 = ares<32,ares<32,ares<32,SUBNET>>>;
+ 
+using anet_type = dlib::loss_metric<dlib::fc_no_bias<128,dlib::avg_pool_everything<
+                            alevel0<
+                            alevel1<
+                            alevel2<
+                            alevel3<
+                            alevel4<
+                            dlib::max_pool<3,3,2,2,dlib::relu<dlib::affine<dlib::con<32,7,7,2,2,
+                            dlib::input_rgb_image_sized<150>
+                            >>>>>>>>>>>>;
 
 void line_one_face_detections(cv::Mat img, std::vector<dlib::full_object_detection> fs)
 {
@@ -94,26 +152,26 @@ void line_one_face_detections(cv::Mat img, std::vector<dlib::full_object_detecti
 
 int main(int argc, char * argv[]) try
 {
-// test
-struct timespec ts_start, ts_end;
-//test
+    // test
+    struct timespec ts_start, ts_end;
+    //test
 
 
-  rs2::log_to_console(RS2_LOG_SEVERITY_ERROR);
+//   rs2::log_to_console(RS2_LOG_SEVERITY_ERROR);
 
-  rs2::config cfg;
+//   rs2::config cfg;
   ///设置从设备管道获取的深度图和彩色图的配置对象
   ///配置彩色图像流：分辨率640*480，图像格式：BGR， 帧率：30帧/秒
-  cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 30);
+//   cfg.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_BGR8, 30);
   ///配置深度图像流：分辨率640*480，图像格式：Z16， 帧率：30帧/秒
 //   cfg.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, 30);
 
   ///生成Realsense管道，用来封装实际的相机设备
-  rs2::pipeline pipe;
+//   rs2::pipeline pipe;
   ///根据给定的配置启动相机管道
-  pipe.start(cfg);
+//   pipe.start(cfg);
   
-  rs2::frameset data;
+//   rs2::frameset data;
 //   while(1)
 //   {
 	///等待一帧数据，默认等待5s
@@ -128,15 +186,95 @@ struct timespec ts_start, ts_end;
     // cv::Mat image(cv::Size(640, 480), CV_8UC3, (void*)color.get_data(), cv::Mat::AUTO_STEP);
     // cv::Mat depthmat(cv::Size(640, 480), CV_16U, (void*)depth.get_data(), cv::Mat::AUTO_STEP);
 
-    // dlib begin
-    cv::Mat image = imread("./man.jpeg");
-    //提取灰度图
-    cv::cvtColor(image, image, CV_BGR2GRAY);
+//-----------
+//------------先做一次检测
+    dlib::shape_predictor sp;
+    dlib::deserialize(dlibModel) >> sp;
+    cv::CascadeClassifier faceDetector(cvModel);
+    if(faceDetector.empty())
+    {
+        std::cout << "face detector is empty!" <<std::endl;
+        return 0;
+    }
+    //加载负责人脸识别的DNN
+    anet_type net;
+    dlib::deserialize(dnnModel) >> net;
+ 
+    //人脸描述符库, face_descriptor ---> name
+    map<dlib::matrix<float,0,1>, string> fdlib;
+    
+    std::map<string, string> files;
+    getFiles(argv[1], files);
+ 
+    if(files.empty())
+    {
+        std::cout<< "No pic files found in "<< argv[1] <<std::endl;
+        return 0;
+    }
+    for(map<string, string>::iterator it = files.begin(); it != files.end(); it++  )
+    {
+        std::cout << "filename:" << it->second << " filepath:" <<it->first<<std::endl;
+ 
+        cv::Mat frame = cv::imread(it->first);
+        cv::Mat src;
+        cv::cvtColor(frame, src, CV_BGR2GRAY);
+        dlib::array2d<dlib::bgr_pixel> dimg;
+        dlib::assign_image(dimg, dlib::cv_image<uchar>(src)); 
+ 
+        //haar级联分类器探测人脸区域，获取一系列人脸所在区域
+        std::vector<cv::Rect> objects;
+        std::vector<dlib::rectangle> dets;
+        faceDetector.detectMultiScale(src, objects);
+        for (int i = 0; i < objects.size(); i++)
+        {
+            //cv::rectangle(frame, objects[i], CV_RGB(200,0,0));
+            dlib::rectangle r(objects[i].x, objects[i].y, objects[i].x + objects[i].width, objects[i].y + objects[i].height);
+            dets.push_back(r);  //正常情况下应该只检测到一副面容
+        }
+ 
+        if (dets.size() == 0)
+            continue;
+ 
+        std::vector<dlib::matrix<dlib::rgb_pixel>> faces;
+        std::vector<dlib::full_object_detection> shapes;
+        for(int i = 0; i < dets.size(); i++)
+        {
+            dlib::full_object_detection shape = sp(dimg, dets[i]); //获取指定一个区域的人脸形状
+            shapes.push_back(shape); 
+ 
+            dlib::matrix<dlib::rgb_pixel> face_chip;
+            dlib::extract_image_chip(dimg, dlib::get_face_chip_details(shape,150,0.25), face_chip);
+ 
+            faces.push_back(move(face_chip));
+        }
+ 
+        if (faces.size() == 0)
+        {
+            cout << "No faces found in " << it->second<<endl;
+            continue;
+        }
+ 
+        std::vector<dlib::matrix<float,0,1>> face_descriptors = net(faces);
+ 
+        for(std::vector<dlib::matrix<float,0,1>>::iterator iter = face_descriptors.begin(); iter != face_descriptors.end(); iter++ )
+        {
+            fdlib.insert(pair<dlib::matrix<float,0,1>, string>(*iter, it->second));
+        }
+    }
+//------------
+//-----------
+
+    // dlib begin 用于非人脸比对
+    // cv::Mat image = imread(imagePath);
+    // if(image.empty()){
+    //     std::cout<<"image empty, change image path."<<std::endl;
+    // }
+    // //提取灰度图
+    // cv::cvtColor(image, image, CV_BGR2GRAY);
 
     //加载dlib的人脸识别器
     // dlib::array<array2d<unsigned char> > images;
     // std::vector<std::vector<full_object_detection> > objects;
-    frontal_face_detector detector = get_frontal_face_detector();     
     // shape_predictor_trainer trainer;
     // trainer.set_tree_depth(2);
     // trainer.set_nu(0.05);
@@ -148,32 +286,186 @@ struct timespec ts_start, ts_end;
 
     //加载人脸形状探测器
     clock_gettime(CLOCK_MONOTONIC, &ts_start);
-    dlib::shape_predictor sp;
-    dlib::deserialize("./data") >> sp;
+    // dlib::shape_predictor sp;
+    // dlib::deserialize(dlibModel) >> sp;
     clock_gettime(CLOCK_MONOTONIC, &ts_end);
     printf("CLOCK_MONOTONIC1 reports %ld.%09ld seconds\n", ts_end.tv_sec - ts_start.tv_sec, ts_end.tv_nsec - ts_start.tv_nsec);
 
-    //Mat转化为dlib的matrix
-    clock_gettime(CLOCK_MONOTONIC, &ts_start);
-    dlib::array2d<dlib::bgr_pixel> dlibImg;
-    dlib::assign_image(dlibImg, dlib::cv_image<unsigned char>(image));
-    clock_gettime(CLOCK_MONOTONIC, &ts_end);
-    printf("CLOCK_MONOTONIC2 reports %ld.%09ld seconds\n", ts_end.tv_sec - ts_start.tv_sec, ts_end.tv_nsec - ts_start.tv_nsec);
-
-
+    //Mat转化为dlib的matrix 用于非人脸比对
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // dlib::array2d<dlib::bgr_pixel> dlibImg;
+    // dlib::assign_image(dlibImg, dlib::cv_image<unsigned char>(image));
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // printf("CLOCK_MONOTONIC2 reports %ld.%09ld seconds\n", ts_end.tv_sec - ts_start.tv_sec, ts_end.tv_nsec - ts_start.tv_nsec);
+//----------
     //获取一系列人脸所在区域
-    clock_gettime(CLOCK_MONOTONIC, &ts_start);
-    std::vector<dlib::rectangle> dets = detector(dlibImg);
-    std::cout << "Number of faces detected: " << dets.size() << std::endl;
-    clock_gettime(CLOCK_MONOTONIC, &ts_end);
-    printf("CLOCK_MONOTONIC3 reports %ld.%09ld seconds\n", ts_end.tv_sec - ts_start.tv_sec, ts_end.tv_nsec - ts_start.tv_nsec);
-
-    // if (dets.size() == 0)
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // dlib::frontal_face_detector detector = dlib::get_frontal_face_detector();
+    // std::vector<dlib::rectangle> dets = detector(dlibImg);
+    // std::cout << "Number of faces detected: " << dets.size() << std::endl;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // printf("CLOCK_MONOTONIC3 reports %ld.%09ld seconds\n", ts_end.tv_sec - ts_start.tv_sec, ts_end.tv_nsec - ts_start.tv_nsec);
+    //if (dets.size() == 0)
     //     return 0;
+//-----------
+//-----------
+    //haar级联分类器探测人脸区域，获取一系列人脸所在区域
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // cv::CascadeClassifier faceDetector(cvModel);
+    // if(faceDetector.empty())
+    // {
+    //     std::cout << "face detector is empty!" <<std::endl;
+    //     // return 0;
+    // }
+    // std::vector<cv::Rect> objects;
+    // std::vector<dlib::rectangle> dets;
+    // faceDetector.detectMultiScale(image, objects);
+    // for (int i = 0; i < objects.size(); i++)
+    // {
+    //     cv::rectangle(image, objects[i], CV_RGB(200,0,0));
+    //     dlib::rectangle r(objects[i].x, objects[i].y, objects[i].x + objects[i].width, objects[i].y + objects[i].height);
+    //     dets.push_back(r);
+    // } 
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // printf("CLOCK_MONOTONIC3 reports %ld.%09ld seconds\n", ts_end.tv_sec - ts_start.tv_sec, ts_end.tv_nsec - ts_start.tv_nsec);
+//    if (dets.size() == 0)
+//        return 0;
+//------------
+//------------用于人脸比对检测的函数段
+    //haar级联分类器探测人脸区域，获取一系列人脸所在区域
+    cv::Mat image = cv::imread(argv[2]);
+    cv::Mat src;
+    cv::cvtColor(image, src, CV_BGR2GRAY);
+    dlib::array2d<dlib::bgr_pixel> dlibImg;
+    dlib::assign_image(dlibImg, dlib::cv_image<uchar>(src));
+    std::vector<cv::Rect> objects;
+    std::vector<dlib::rectangle> dets;
+    faceDetector.detectMultiScale(image, objects);
+    for (int i = 0; i < objects.size(); i++)
+    {
+        cv::rectangle(image, objects[i], CV_RGB(200,0,0));
+        dlib::rectangle r(objects[i].x, objects[i].y, objects[i].x + objects[i].width, objects[i].y + objects[i].height);
+        dets.push_back(r);  //正常情况下应该只检测到一副面容
+    }
+ 
+    if (dets.size() == 0)
+    {
+        cout << "there is no faces found in " << argv[2] <<endl;
+        return -1;
+    }
+ 
+    std::vector<dlib::matrix<dlib::rgb_pixel>> faces;
+    std::vector<dlib::full_object_detection> shapes;
+    for(int i = 0; i < dets.size(); i++)
+    {
+        dlib::full_object_detection shape = sp(dlibImg, dets[i]); //获取指定一个区域的人脸形状
+        shapes.push_back(shape); 
+ 
+        dlib::matrix<dlib::rgb_pixel> face_chip;
+        dlib::extract_image_chip(dlibImg, dlib::get_face_chip_details(shape,150,0.25), face_chip);
+ 
+        faces.push_back(move(face_chip));
+    }
+    if (faces.size() == 0)
+    {
+        cout << "No faces found in " << argv[2] <<endl;
+        return -1;
+    }
+//------------
+//------------仅仅需要这段用于视频
+//加载视频
+    // VideoCapture capture(argv[2]);
+    // int frames = capture.get(CAP_PROP_FRAME_COUNT);//获取视频针数目(一帧就是一张图片)
+    // double fps = capture.get(CAP_PROP_FPS);//获取每针视频的频率
+    // // 获取帧的视频宽度，视频高度
+    // Size size = Size(capture.get(CAP_PROP_FRAME_WIDTH), capture.get(CAP_PROP_FRAME_HEIGHT));
+    // cout << frames << endl;
+    // cout << fps << endl;
+    // cout << size << endl;
+    // //创建写入对象,需要指定，帧率和视频宽高
+    // VideoWriter writer;
+    // //指定保存文件位置，编码器，帧率，宽高
+    // writer.open("test.avi", VideoWriter::fourcc('M','J','P','G'), fps, size);
+    // //VideoWriter writer("VideoTest.avi",CV_FOURCC('M', 'J', 'P', 'G'), 20.0,Size(480, 848));  
+    // while(true)
+    // {
+    //     //加载待检测的图片
+    //     cv::Mat frame;
+    //     capture >> frame;
+    //     if (frame.empty())
+    //         break;
+
+    //     cv::Mat src;
+    //     cv::cvtColor(frame, src, CV_BGR2GRAY);
+    //     dlib::array2d<dlib::bgr_pixel> dimg;
+    //     dlib::assign_image(dimg, dlib::cv_image<uchar>(src));
+
+    //     //haar级联分类器探测人脸区域，获取一系列人脸所在区域
+    //     std::vector<cv::Rect> objects;
+    //     std::vector<dlib::rectangle> dets;
+    //     faceDetector.detectMultiScale(src, objects);
+    //     for (int i = 0; i < objects.size(); i++)
+    //     {
+    //         cv::rectangle(frame, objects[i], CV_RGB(200,0,0));
+    //         dlib::rectangle r(objects[i].x, objects[i].y, objects[i].x + objects[i].width, objects[i].y + objects[i].height);
+    //         dets.push_back(r);  //正常情况下应该只检测到一副面容
+    //     }
+
+    //     if (dets.size() == 0)
+    //     {
+    //         continue;
+    //     }
+
+    //     std::vector<dlib::matrix<dlib::rgb_pixel>> faces;
+    //     std::vector<dlib::full_object_detection> shapes;
+    //     for(int i = 0; i < dets.size(); i++)
+    //     {
+    //         dlib::full_object_detection shape = sp(dimg, dets[i]); //获取指定一个区域的人脸形状
+    //         shapes.push_back(shape); 
+
+    //         dlib::matrix<dlib::rgb_pixel> face_chip;
+    //         dlib::extract_image_chip(dimg, dlib::get_face_chip_details(shape,150,0.25), face_chip);
+
+    //         faces.push_back(move(face_chip));
+    //     }
+    //     if (faces.size() == 0)
+    //     {
+    //         continue;
+    //     }
+    //     line_one_face_detections(frame, shapes);
+
+    //     std::vector<dlib::matrix<float,0,1>> face_descriptors = net(faces);
+
+    //     //遍历库，查找相似图像
+    //     float min_distance = 0.7;
+    //     std::string similar_name = "unknown";
+    //     for(map<dlib::matrix<float,0,1>, string>::iterator it=fdlib.begin(); it != fdlib.end(); it++ )
+    //     {
+    //         float distance = length(it->first - face_descriptors[0]);
+    //         if( distance < 0.5 )  //应该计算一个最近值
+    //         {
+    //             if( distance <= min_distance)
+    //             {
+    //                 min_distance = distance;
+    //                 similar_name = it->second;
+    //             }
+    //         }
+    //     }
+
+    //     if(min_distance < 0.5)
+    //     {
+    //         float similarity = (0.5 - min_distance) * 100 / 0.5;
+    //         stringstream strStream; 
+    //         strStream << similar_name << ", " << similarity << '%' << endl;
+    //         string s = strStream.str();
+    //         cv::Point org(objects[0].x, objects[0].y);
+    //         cv::putText(frame, s, org, cv::FONT_HERSHEY_SIMPLEX, 1.0, CV_RGB(0, 200, 0));
+    //     }
+//------------
 
     //获取人脸特征点分布
     clock_gettime(CLOCK_MONOTONIC, &ts_start);
-    std::vector<dlib::full_object_detection> shapes;
+    // std::vector<dlib::full_object_detection> shapes;
     for(int i = 0; i < dets.size(); i++)
     {
         dlib::full_object_detection shape = sp(dlibImg, dets[i]); //获取指定一个区域的人脸形状
@@ -203,6 +495,24 @@ struct timespec ts_start, ts_end;
     printf("CLOCK_MONOTONIC6 reports %ld.%09ld seconds\n", ts_end.tv_sec - ts_start.tv_sec, ts_end.tv_nsec - ts_start.tv_nsec);
 
     // dlib end
+
+//-------------------用于人脸比对函数段
+    std::vector<dlib::matrix<float,0,1>> face_descriptors = net(faces);
+ 
+    //遍历库，查找相似图像
+    for(map<dlib::matrix<float,0,1>, string>::iterator it=fdlib.begin(); it != fdlib.end(); it++ )
+    {
+        float distance = length(it->first - face_descriptors[0]);
+        if( distance < 0.6 )
+        {
+            cout << "the pic is " << it->second << "!, distance:" << distance << endl;
+ 
+            cv::Point org(objects[0].x, objects[0].y);
+            cv::putText(image, it->second, org, cv::FONT_HERSHEY_SIMPLEX, 1.0, CV_RGB(0, 200, 0));
+            break;
+        }
+    }
+//-------------------
 
 	///显示
     cv::imshow("image",image);
